@@ -1,0 +1,23 @@
+name: SAST - Semgrep (idor)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: pip install semgrep
+
+      - name: Run Semgrep SAST
+        run: semgrep --config p/owasp-top-ten idor-example --error
+
+      - name: Upload SARIF report
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: semgrep.sarif
+
