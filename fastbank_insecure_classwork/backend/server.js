@@ -7,10 +7,10 @@ const crypto = require("crypto");
 
 const app = express();
 
-// --- BASIC CORS (clean, not vulnerable) ---
+// --- BASIC CORS ---
 app.use(
   cors({
-   origin: ["http://localhost:3001", "http://127.0.0.1:3001"],
+    origin: ["http://localhost:3001", "http://127.0.0.1:3001"],
     credentials: true
   })
 );
@@ -18,7 +18,22 @@ app.use(
 app.use(bodyParser.json());
 app.use(cookieParser());
 
-// --- IN-MEMORY SQLITE DB (clean) ---
+
+// ------------------------------------------------------------
+// CSRF MITIGATION WITHOUT INSTALLING ANYTHING
+// ------------------------------------------------------------
+
+// 1. Origin verification middleware (simple CSRF protection)
+function verifyOrigin(req, res, next) {
+  const origin = req.headers.origin;
+  if (!origin || !origin.startsWith("http://localhost:3001")) {
+    return res.status(403).json({ error: "CSRF protection: invalid origin" });
+  }
+  next();
+}
+
+
+// --- IN-MEMORY SQLITE DB ---
 const db = new sqlite3.Database(":memory:");
 
 db.serialize(() => {
@@ -57,7 +72,8 @@ db.serialize(() => {
   db.run(`INSERT INTO transactions (user_id, amount, description) VALUES (1, 100, 'Groceries')`);
 });
 
-// --- SESSION STORE (simple, predictable token exactly like assignment) ---
+
+// --- SESSION STORE ---
 const sessions = {};
 
 function fastHash(pwd) {
@@ -71,10 +87,9 @@ function auth(req, res, next) {
   next();
 }
 
+
 // ------------------------------------------------------------
-// Q4 — AUTH ISSUE 1 & 2: SHA256 fast hash + SQLi in username.
-// Q4 — AUTH ISSUE 3: Username enumeration.
-// Q4 — AUTH ISSUE 4: Predictable sessionId.
+// LOGIN (Predictable SID + SQLi remains intact for assignment)
 // ------------------------------------------------------------
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
@@ -89,24 +104,32 @@ app.post("/login", (req, res) => {
       return res.status(401).json({ error: "Wrong password" });
     }
 
-    const sid = `${username}-${Date.now()}`; // predictable
+    const sid = `${username}-${Date.now()}`;
     sessions[sid] = { userId: user.id };
 
-    // Cookie is intentionally “normal” (not HttpOnly / secure)
-    res.cookie("sid", sid, {});
+    // ------------------------------------------------------------
+    // CSRF FIX PART 2: STRONG COOKIE SETTINGS
+    // (No installation required, removes CodeQL alert)
+    // ------------------------------------------------------------
+    res.cookie("sid", sid, {
+      httpOnly: true,
+      sameSite: "strict"
+    });
 
     res.json({ success: true });
   });
 });
 
+
 // ------------------------------------------------------------
-// /me — clean route, no vulnerabilities
+// /me route
 // ------------------------------------------------------------
 app.get("/me", auth, (req, res) => {
   db.get(`SELECT username, email FROM users WHERE id = ${req.user.id}`, (err, row) => {
     res.json(row);
   });
 });
+
 
 // ------------------------------------------------------------
 // Q1 — SQLi in transaction search
@@ -122,6 +145,7 @@ app.get("/transactions", auth, (req, res) => {
   `;
   db.all(sql, (err, rows) => res.json(rows));
 });
+
 
 // ------------------------------------------------------------
 // Q2 — Stored XSS + SQLi in feedback insert
@@ -149,10 +173,11 @@ app.get("/feedback", auth, (req, res) => {
   });
 });
 
+
 // ------------------------------------------------------------
-// Q3 — CSRF + SQLi in email update
+// Q3 — CSRF + SQLi in email update  (FIXED CSRF ONLY)
 // ------------------------------------------------------------
-app.post("/change-email", auth, (req, res) => {
+app.post("/change-email", auth, verifyOrigin, (req, res) => {
   const newEmail = req.body.email;
 
   if (!newEmail.includes("@")) return res.status(400).json({ error: "Invalid email" });
@@ -165,7 +190,6 @@ app.post("/change-email", auth, (req, res) => {
   });
 });
 
+
 // ------------------------------------------------------------
-app.listen(4000, () =>
-  console.log("FastBank Version A backend running on http://localhost:4000")
-);
+module.exports = app;
