@@ -15,6 +15,30 @@ app.use(express.static(path.join(__dirname, 'public')));
 const BASE_DIR = path.resolve(__dirname, 'files');
 if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
 
+// simple in-memory rate limiter
+const rateLimitWindowMs = 60 * 1000;
+const rateLimitMaxRequests = 20;
+const rateLimitStore = new Map();
+
+function rateLimiter(req, res, next) {
+  const key = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+  const now = Date.now();
+  let entry = rateLimitStore.get(key);
+
+  if (!entry || now - entry.start > rateLimitWindowMs) {
+    entry = { count: 0, start: now };
+  }
+
+  entry.count += 1;
+  rateLimitStore.set(key, entry);
+
+  if (entry.count > rateLimitMaxRequests) {
+    return res.status(429).json({ error: 'Too many requests, please try again later' });
+  }
+
+  next();
+}
+
 function resolveSafe(baseDir, userInput) {
   try {
     userInput = decodeURIComponent(userInput);
@@ -24,6 +48,7 @@ function resolveSafe(baseDir, userInput) {
 
 app.post(
   '/read',
+  rateLimiter,
   body('filename')
     .exists()
     .bail()
@@ -52,7 +77,7 @@ app.post(
   }
 );
 
-app.post('/read-no-validate', (req, res) => {
+app.post('/read-no-validate', rateLimiter, (req, res) => {
   const filename = req.body.filename || '';
   const safePath = path.resolve(BASE_DIR, filename);
 
@@ -68,7 +93,7 @@ app.post('/read-no-validate', (req, res) => {
   res.json({ path: safePath, content });
 });
 
-app.post('/setup-sample', (req, res) => {
+app.post('/setup-sample', rateLimiter, (req, res) => {
   const samples = {
     'hello.txt': 'Hello from safe file!\n',
     'notes/readme.md': '# Readme\nSample readme file'
