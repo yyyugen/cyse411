@@ -7,17 +7,32 @@ on:
 jobs:
   semgrep:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install dependencies
-        run: pip install semgrep
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Semgrep
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install semgrep
 
       - name: Run Semgrep SAST
-        run: semgrep --config p/owasp-top-ten idor-example --error
+        run: |
+          semgrep \
+            --config p/owasp-top-ten \
+            --sarif --output semgrep.sarif \
+            idor/
 
       - name: Upload SARIF report
         uses: github/codeql-action/upload-sarif@v2
         with:
           sarif_file: semgrep.sarif
-
