@@ -4,6 +4,7 @@ const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const sqlite3 = require("sqlite3").verbose();
 const crypto = require("crypto");
+const lusca = require("lusca"); // CSRF protection
 
 const app = express();
 
@@ -17,6 +18,14 @@ app.use(
 
 app.use(bodyParser.json());
 app.use(cookieParser());
+
+// --- CSRF PROTECTION ---
+app.use(lusca.csrf());
+
+// Endpoint to retrieve CSRF token for frontend use
+app.get("/csrf-token", (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
+});
 
 
 // ------------------------------------------------------------
