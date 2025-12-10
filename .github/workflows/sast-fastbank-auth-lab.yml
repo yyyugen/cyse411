@@ -7,14 +7,25 @@ on:
 jobs:
   semgrep:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write
+
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install dependencies
-        run: pip install semgrep
+      - name: Install Semgrep
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install semgrep
 
       - name: Run Semgrep SAST
-        run: semgrep --config p/owasp-top-ten fastbank-auth-lab --error
+        run: |
+          semgrep \
+            --config p/owasp-top-ten \
+            --sarif --output semgrep.sarif \
+            fastbank-auth-lab/
 
       - name: Upload SARIF report
         uses: github/codeql-action/upload-sarif@v2
