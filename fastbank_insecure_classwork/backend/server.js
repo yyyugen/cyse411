@@ -182,10 +182,11 @@ app.post("/change-email", auth, verifyOrigin, (req, res) => {
 
   if (!newEmail.includes("@")) return res.status(400).json({ error: "Invalid email" });
 
-  const sql = `
-    UPDATE users SET email = '${newEmail}' WHERE id = ${req.user.id}
-  `;
-  db.run(sql, () => {
+  const sql = `UPDATE users SET email = ? WHERE id = ?`;
+  db.run(sql, [newEmail, req.user.id], function(err) {
+    if (err) {
+      return res.status(500).json({ success: false, error: "Database error" });
+    }
     res.json({ success: true, email: newEmail });
   });
 });
