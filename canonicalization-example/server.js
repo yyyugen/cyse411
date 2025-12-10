@@ -17,9 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const BASE_DIR = path.resolve(__dirname, 'files');
 if (!fs.existsSync(BASE_DIR)) fs.mkdirSync(BASE_DIR, { recursive: true });
 
-// ------------------------------------------------------------
-// Helper: Canonicalize + Validate Path
-// ------------------------------------------------------------
+
 function resolveSafe(baseDir, userInput) {
   try {
     userInput = decodeURIComponent(userInput); // Avoid bypass via encoded traversal
@@ -29,9 +27,6 @@ function resolveSafe(baseDir, userInput) {
   return path.resolve(baseDir, userInput);
 }
 
-// ------------------------------------------------------------
-// SECURE ROUTE — FIXED PATH TRAVERSAL
-// ------------------------------------------------------------
 app.post(
   '/read',
   body('filename')
@@ -69,26 +64,26 @@ app.post(
   }
 );
 
-// ------------------------------------------------------------
-// VULNERABLE ROUTE — INTENTIONALLY NOT FIXED (for the lab)
-// ------------------------------------------------------------
 app.post('/read-no-validate', (req, res) => {
   const filename = req.body.filename || '';
 
-  // ❗ This is intentionally vulnerable (Semgrep should flag it)
-  const joined = path.join(BASE_DIR, filename);
+  // FIX: canonicalize the path
+  const safePath = path.resolve(BASE_DIR, filename);
 
-  if (!fs.existsSync(joined)) {
-    return res.status(404).json({ error: 'File not found', path: joined });
+  // FIX: enforce containment inside BASE_DIR
+  if (!safePath.startsWith(BASE_DIR + path.sep)) {
+    return res.status(403).json({ error: "Path traversal detected" });
   }
 
-  const content = fs.readFileSync(joined, 'utf8');
-  res.json({ path: joined, content });
+  if (!fs.existsSync(safePath)) {
+    return res.status(404).json({ error: "File not found", path: safePath });
+  }
+
+  const content = fs.readFileSync(safePath, 'utf8');
+  res.json({ path: safePath, content });
 });
 
-// ------------------------------------------------------------
-// Sample file setup route
-// ------------------------------------------------------------
+
 app.post('/setup-sample', (req, res) => {
   const samples = {
     'hello.txt': 'Hello from safe file!\n',
@@ -109,9 +104,6 @@ app.post('/setup-sample', (req, res) => {
   res.json({ ok: true, base: BASE_DIR });
 });
 
-// ------------------------------------------------------------
-// Start server when run directly
-// ------------------------------------------------------------
 if (require.main === module) {
   const port = process.env.PORT || 4000;
   app.listen(port, () => {
