@@ -2,9 +2,17 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const { body, validationResult } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 
+// Set up rate limiter: 100 requests per 15 minutes per IP
+const readNoValidateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -49,7 +57,7 @@ app.post(
   }
 );
 
-app.post('/read-no-validate', (req, res) => {
+app.post('/read-no-validate', readNoValidateLimiter, (req, res) => {
   const filename = req.body.filename || '';
   const safePath = path.resolve(BASE_DIR, filename);
 
