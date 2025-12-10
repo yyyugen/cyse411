@@ -8,6 +8,8 @@ const bcrypt = require("bcrypt");
 const app = express();
 const PORT = 3001;
 
+#testing 
+  
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
