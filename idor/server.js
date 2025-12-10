@@ -1,5 +1,4 @@
 "This is a test"
-"Testing" 
 
 const express = require("express");
 const app = express();
